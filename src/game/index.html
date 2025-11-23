@@ -1,11 +1,29 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="utf-8">
-<title>SnoSki</title>
+    <meta charset="utf-8">
+    <title>SNO SKI</title>
+
+    <!-- Import map, da "engine/" in "glm" delata kot v frameworku -->
+    <script type="importmap">
+    {
+        "imports": {
+            "engine/": "../engine/",
+            "dat": "../lib/dat.js",
+            "glm": "../lib/glm.js"
+        }
+    }
+    </script>
+
+    <script type="module" src="main.js"></script>
+
+    <!-- CSS iz engine (če ga imaš v src/engine); če imaš style.css v src/,
+         lahko spremeniš v ../style.css -->
+    <link rel="stylesheet" href="../engine/style.css">
 </head>
 <body>
-<canvas id="gfx" width="800" height="600"></canvas>
-<script type="module" src="./main.js"></script>
+    <div class="fullscreen no-touch pixelated">
+        <canvas></canvas>
+    </div>
 </body>
 </html>
