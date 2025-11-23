@@ -15,151 +15,175 @@ import { UpdateSystem } from 'engine/systems/UpdateSystem.js';
 import { loadResources } from 'engine/loaders/resources.js';
 
 //
-// 1) Naložimo geometrijo in teksturo kocke
+// 1) NALOŽIMO MESH IN SNEŽNO TEKSTURO
 //
 const resources = await loadResources({
-    cubeMesh:    new URL('../models/cube/cube.json', import.meta.url),
-    cubeTexture: new URL('../models/cube/cube-diffuse.png', import.meta.url),
+    cubeMesh: new URL('../models/cube/cube.json', import.meta.url),
+    snowTex:  new URL('../models/snow/Snow010A_2K-JPG_Color.jpg', import.meta.url),
 });
 
-// Enoten sampler in tekstura za vse objekte
-const cubeTexture = new Texture({
-    image: resources.cubeTexture,
+// enotni sampler + tekstura (sneg) za vse objekte
+const snowTexture = new Texture({
+    image: resources.snowTex,
     sampler: new Sampler({
         magFilter: 'linear',
         minFilter: 'linear',
     }),
 });
 
-// Helper: naredi Primitive z določeno barvo (baseFactor)
-// barva se množi s teksturo, tako dobimo npr. rdeča/ modra vratca
+// helper: primitive z barvnim faktorjem (barva * tekstura)
 function createColoredPrimitive(r, g, b, a = 1) {
     return new Primitive({
         mesh: resources.cubeMesh,
         material: new Material({
-            baseTexture: cubeTexture,
+            baseTexture: snowTexture,
             baseFactor: [r, g, b, a],
         }),
     });
 }
 
 //
-// 2) Entitete – naš svet
+// 2) ENTITETE – SVET
 //
 
-// 2.1. Teren / smučarska proga – zelo dolg in širok
+// 2.1. Smučarska proga: zelo široka in dolga “ploskev”
 const slope = new Entity();
 slope.addComponent(new Transform({
     translation: [0, -1.5, 0],
-    scale:       [10, 0.2, 140],    // širša in daljša proga, čez skoraj cel ekran
+    // X = širina, Y = debelina, Z = dolžina
+    scale: [60, 0.2, 600],
 }));
 slope.addComponent(new Model({
-    primitives: [createColoredPrimitive(1, 1, 1, 1)],   // bel “sneg”
+    primitives: [createColoredPrimitive(1.0, 1.0, 1.0, 1)],
 }));
 
-// 2.2. Drevesa – visoke kocke ob robu proge
-function createTree(x, z) {
+// 2.2. Drevesa ob robu proge
+function createTree(x, z, height = 4) {
     const tree = new Entity();
     tree.addComponent(new Transform({
         translation: [x, -0.5, z],
-        scale:       [0.6, 3, 0.6],
+        scale: [0.9, height, 0.9],
     }));
     tree.addComponent(new Model({
-        primitives: [createColoredPrimitive(0.1, 0.6, 0.2, 1)],
+        // rahlo zelenkast ton
+        primitives: [createColoredPrimitive(0.2, 0.6, 0.2, 1)],
     }));
     return tree;
 }
 
-const trees = [
-    createTree(-5, -15),
-    createTree( 5, -25),
-    createTree(-4, -40),
-    createTree( 4, -55),
-    createTree(-6, -75),
-    createTree( 6, -95),
-];
+// bolj “naključno” razmetana drevesa
+const trees = [];
+{
+    const treeCount = 40;
+    for (let i = 0; i < treeCount; i++) {
+        // gremo po dolžini proge navzdol
+        const z = -20 - i * 15; // od približno -20 do globoko v dolino
 
-// 2.3. Vratca – par količkov, center se premika levo-desno (S-oblika)
-function createGatePair(zPos, centerX, redOnLeft) {
-    const gateOffsetX    = 2.3;
-    const poleHeight     = 2.3;
+        // naključno levo/desno
+        const side = Math.random() < 0.5 ? -1 : 1;
+
+        // da niso v ravni liniji: baza med 18 in 26 enot od centra
+        const xBase = 18 + Math.random() * 8;
+        const x = side * xBase;
+
+        // višina med 3 in 6
+        const height = 3 + Math.random() * 3;
+
+        trees.push(createTree(x, z, height));
+    }
+}
+
+// 2.3. Vratca – par palic iste barve (rdeča ali modra)
+function createGatePair(zPos, centerX, isRedGate) {
+    const gateHalfWidth  = 1.8;   // polovica razmika med količkoma
+    const poleHeight     = 2.2;
     const poleThickness  = 0.12;
 
     const red  = [1.0, 0.1, 0.1, 1];
     const blue = [0.1, 0.3, 1.0, 1];
 
-    const leftColor  = redOnLeft ? red  : blue;
-    const rightColor = redOnLeft ? blue : red;
+    // če je isRedGate = true → OBEDVI palici rdeči
+    // če je isRedGate = false → OBEDVI palici modri
+    const color = isRedGate ? red : blue;
 
     const leftGate = new Entity();
     leftGate.addComponent(new Transform({
-        translation: [centerX - gateOffsetX, -0.4, zPos],
+        translation: [centerX - gateHalfWidth, -0.4, zPos],
         scale:       [poleThickness, poleHeight, poleThickness],
     }));
     leftGate.addComponent(new Model({
-        primitives: [createColoredPrimitive(...leftColor)],
+        primitives: [createColoredPrimitive(...color)],
     }));
 
     const rightGate = new Entity();
     rightGate.addComponent(new Transform({
-        translation: [centerX + gateOffsetX, -0.4, zPos],
+        translation: [centerX + gateHalfWidth, -0.4, zPos],
         scale:       [poleThickness, poleHeight, poleThickness],
     }));
     rightGate.addComponent(new Model({
-        primitives: [createColoredPrimitive(...rightColor)],
+        primitives: [createColoredPrimitive(...color)],
     }));
 
     return [leftGate, rightGate];
 }
 
-// Naredimo več vratc po progi, izmenično rdeča/modra in levo-desno “valovita”
+// Naredimo več vratc po progi, zaporedje: R/R → B/B → R/R → B/B ...
 const gates = [];
-const gateCount    = 10;
-const gateStartZ   = -15;
-const gateSpacingZ = -12;          // bolj narazen po globini
-const gateAmplitudeX = 3.0;        // koliko zavije levo-desno
+{
+    const gateCount  = 12;
+    const firstGateZ = -40;
+    const gateStepZ  = -35;
 
-for (let i = 0; i < gateCount; i++) {
-    const z = gateStartZ + i * gateSpacingZ;
-    const centerX = Math.sin(i * 0.7) * gateAmplitudeX;
-    const redOnLeft = (i % 2 === 0);
-    const [leftGate, rightGate] = createGatePair(z, centerX, redOnLeft);
-    gates.push(leftGate, rightGate);
+    for (let i = 0; i < gateCount; i++) {
+        const z = firstGateZ + i * gateStepZ;
+
+        // center vratc naj vijuga po X, da je bolj zanimivo
+        const centerX = Math.sin(i * 0.6) * 8.0;
+
+        // parni: rdeča vratca, neparni: modra vratca
+        const isRedGate = (i % 2 === 0);
+
+        const [leftGate, rightGate] = createGatePair(z, centerX, isRedGate);
+        gates.push(leftGate, rightGate);
+    }
 }
 
-// 2.4. Smučar – zaenkrat samo kocka na vrhu proge
+// 2.4. Smučar – zaenkrat kocka blizu vrha proge
 const skier = new Entity();
 skier.addComponent(new Transform({
-    translation: [0, 0, 15],
-    scale:       [0.6, 1.2, 0.6],
+    translation: [0, 0.2, 8],
+    scale: [0.7, 1.3, 0.7],
 }));
 skier.addComponent(new Model({
-    primitives: [createColoredPrimitive(1.0, 0.8, 0.2, 1)],
+    primitives: [createColoredPrimitive(1.0, 0.9, 0.3, 1)], // rumenkast
 }));
 
-// 2.5. Kamera – zelo visoko in daleč, malo nagnjena navzdol
-function createPitchQuatX(angle) {
-    const half = angle * 0.5;
-    const s = Math.sin(half);
-    const c = Math.cos(half);
-    // [x, y, z, w]
-    return [s, 0, 0, c];
-}
-
+// 2.5. Kamera – pogled od zgoraj, malo poševno
 const cameraEntity = new Entity();
+
+const cameraAngle = -0.4; // radiani; negativen = gleda navzdol
+const half = cameraAngle / 2;
+const cameraRotation = [
+    Math.sin(half),  // x
+    0,               // y
+    0,               // z
+    Math.cos(half),  // w
+];
+
 cameraEntity.addComponent(new Transform({
-    translation: [0, 40, 55],        // višje in bolj nazaj
-    rotation:    createPitchQuatX(-Math.PI / 3), // približno 60° dol po pobočju
+    translation: [0, 22, 40],   // višina in razdalja
+    rotation: cameraRotation,
 }));
+
 cameraEntity.addComponent(new Camera({
-    aspect: 1,
-    fovy:   0.7,   // malo ožji kot, “telefoto” pogled
+    aspect: 1,   // v resize() nastavimo pravo razmerje
+    fovy:   0.9,
     near:   0.1,
-    far:    300.0,
+    far:    400.0,
 }));
 
 //
-// 3) Scena = seznam entitet
+// 3) SCENA – seznam entitet
 //
 const scene = [
     slope,
@@ -170,21 +194,24 @@ const scene = [
 ];
 
 //
-// 4) Renderer + sistemi
+// 4) RENDERER + SISTEMI
 //
 const canvas = document.querySelector('canvas');
 const renderer = new UnlitRenderer(canvas);
 await renderer.initialize();
 
 function update(t, dt) {
-    // Splošna posodobitev vseh komponent, če imajo update()
+    // univerzalni update za vse komponente, ki definirajo update()
     for (const entity of scene) {
         for (const component of entity.components) {
             component.update?.(t, dt);
         }
     }
 
-    // TODO: premikanje smučarja, trki, pravilna vratca ...
+    // TODO:
+    // - premikanje smučarja (input + gravitacija)
+    // - kamera, ki sledi smučarju
+    // - detekcija, ali je šel skozi prava vratca
 }
 
 function render() {
